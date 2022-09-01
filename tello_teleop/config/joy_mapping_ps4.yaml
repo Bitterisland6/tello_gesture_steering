@@ -1,0 +1,28 @@
+tello_joy_teleop:
+  ros__parameters:
+    # buttons
+    main_deadman: 5
+    scnd_deadman: 4
+    land_button: 1
+    takeoff_button: 0
+    emergency_button: 2
+    turbo_button: 3
+
+    # axes
+    linear_x: 1
+    linear_y: 0
+    linear_z: 4
+    angular_z: 3
+    flip_ver: 7
+    flip_hor: 6
+
+    # other
+    linear_offset: 0.2
+    linear_scale: 0.25
+    angular_offset: 0.1
+    angular_scale: 0.5
+    flip_keys: [-4, 4, 1, -1]
+    flip_vals: ["r", "l", "f", "b"]
+    flip_axis_hash: 4
+    turbo_lin_scale: 4.0
+    turbo_ang_scale: 2.0

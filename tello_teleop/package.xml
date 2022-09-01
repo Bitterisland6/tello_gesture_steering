@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tello_teleop</name>
+  <version>1.0.0</version>
+  <description>
+    Package with ros nodes and scripts for operating DJI Tello Drone with a controller.
+  </description>
+  <maintainer email="bitterisland6@gmail.com">Aleksander Szymański</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+</package>

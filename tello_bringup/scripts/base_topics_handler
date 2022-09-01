@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+#from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSPresetProfiles, qos_profile_sensor_data
+from tello_msgs.srv import TelloAction
+from tello_msgs.msg import FlightData
+from tello_msgs.msg import TelloResponse
+import std_msgs.msg
+import sensor_msgs.msg
+import cv2
+import cv_bridge
+
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (0, 0, 255)
+
+class TopicsHandler(Node):
+
+    def __init__(self):
+        super().__init__("base_topics_handler")
+        self.current_command = None
+        self.waiting = False
+        
+        self.data_cd = 5.0
+        self.current_command = ""
+        
+        # getting service client
+        self.client = self.create_client(TelloAction, "tello_action")
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        
+        # ros timer
+        self.timer = self.create_timer(self.data_cd, self.battery_timer_callback)
+        
+        # ros publishers
+        self.battery_pub = self.create_publisher(std_msgs.msg.Int16, "battery", 10)
+        self.command_pub = self.create_publisher(std_msgs.msg.String, "command", 10)
+
+        # ros subscribers
+        self.takeoff_sub = self.create_subscription(std_msgs.msg.Empty, "takeoff", self.takeoff_callback, 1)
+        self.land_sub = self.create_subscription(std_msgs.msg.Empty, "land", self.land_callback, 1)
+        self.emergency_sub = self.create_subscription(std_msgs.msg.Empty, "emergency", self.emergency_callback, 1)
+        self.flip_sub = self.create_subscription(std_msgs.msg.String, "flip", self.flip_callback, 1)
+
+        self.response_sub = self.create_subscription(TelloResponse, "tello_response", self.response_callback, 1)
+
+        self.flight_data_sub = self.create_subscription(FlightData, "flight_data", self.data_callback, 1)
+
+
+        self.get_logger().info("Starting node.")
+
+    def takeoff_callback(self, data: std_msgs.msg.Empty):
+        if not self.waiting:
+            self.waiting = True
+            self.current_command = 'takeoff'
+            self.send(self.current_command)
+        else:
+            self.get_logger().info("Service busy with command '{}'.".format(self.current_command))
+
+    def land_callback(self, data: std_msgs.msg.Empty):
+        if not self.waiting:
+            self.waiting = True
+            self.current_command = 'land'
+            self.send(self.current_command)
+        else:
+            self.get_logger().info("Service busy with command '{}'.".format(self.current_command))
+    
+    def emergency_callback(self, data: std_msgs.msg.Empty):
+        if not self.waiting:
+            self.waiting = True
+            self.current_command = 'emergency'
+            self.send(self.current_command)
+        else:
+            self.get_logger().info("Service busy with command '{}'.".format(self.current_command))
+
+    def flip_callback(self, data: std_msgs.msg.String):
+        if not self.waiting:
+            self.waiting = True
+            self.current_command = 'flip ' + str(data.data)
+            self.send(self.current_command)
+        else:
+            self.get_logger().info("Service busy with command '{}'.".format(self.current_command))
+    
+    def data_callback(self, data: std_msgs.msg.Int16):
+        self.last_battery_data = data.bat
+
+    def battery_timer_callback(self):
+        if self.last_battery_data:
+            msg = std_msgs.msg.Int16()
+            msg.data = self.last_battery_data
+            self.battery_pub.publish(msg)
+
+    def send(self, command: str):
+        msg = std_msgs.msg.String()
+        msg.data = command
+        self.command_pub.publish(msg)
+        
+        request = TelloAction.Request()
+        request.cmd = command
+        self.get_logger().info("Sending command: '{}'".format(self.current_command))
+        self.future = self.client.call_async(request)
+        
+    def response_callback(self, data):        
+        self.waiting = False
+
+
+if __name__ == '__main__':
+    rclpy.init()
+    handler = TopicsHandler()
+
+    try:
+        rclpy.spin(handler)
+    except KeyboardInterrupt:
+        handler.get_logger().info("Got Ctrl+C, shuting down.")
+        handler.land_callback("")
+        handler.destroy_node()
+    finally:
+        rclpy.shutdown()

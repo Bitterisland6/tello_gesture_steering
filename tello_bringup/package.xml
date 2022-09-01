@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tello_bringup</name>
+  <version>1.0.0</version>
+  <description>
+    Package with my ros nodes for base functionality of DJI Tello Drone.
+  </description>
+  <maintainer email="bitterisland6@gmail.com">Aleksander Szymański</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  
+  <depend>tello_driver</depend>
+  <depend>cv_bridge</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <!-- <depend>tello_description</depend> -->
+  <depend>tello_msgs</depend>
+  <!-- <depend>tello_gazebo</depend> -->
+  <depend>image_transport</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+</package>

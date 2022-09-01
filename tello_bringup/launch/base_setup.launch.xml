@@ -1,0 +1,19 @@
+<launch version="0.1.1">
+   <arg name="video" default="false" description="Flag specifying whether or not show additional view from drone - from tello_ros node."/>
+    
+    <include file="$(find-pkg-share tello_driver)/launch/tello_driver.launch.xml">
+        <arg name="video_on" value="$(var video)"/>
+        <arg name="output_screen" value="false" />
+    </include>
+    
+    <node pkg="tello_bringup" exec="base_topics_handler" output="screen"/>
+    
+    <node pkg="tello_bringup" exec="video_interface" output="screen">
+        <param from="$(find-pkg-share tello_bringup)/config/video_params.yaml"/>
+    </node>
+   
+    <!-- odpalanie node w gdb -->
+    <!-- <node name="tello_driver" pkg="tello_driver" exec="tello_driver_main" output="log" launch-prefix="xterm -e gdb - -args">  tylko - - args
+        <param name="turn_on_video" value="true" />
+    </node>  -->
+</launch>

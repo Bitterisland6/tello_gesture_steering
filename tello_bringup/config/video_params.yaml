@@ -1,0 +1,22 @@
+video_interface:
+  ros__parameters:
+    #frame 
+    frame_start: [3, 3]
+    frame_thickness: 5
+    
+    # battery text
+    battery_text_origin: [10, 40]
+    battery_prct_origin: [160, 42]
+    battery_thickness: 2
+    battery_font_size: 1
+    
+    # status text
+    status_text_origin: [10, 70]
+    status_origin: [140, 72]
+    status_thickness: 2
+    status_font_size: 1
+
+    # colors
+    success_color: [0.0, 255.0, 0.0]
+    error_color: [0.0, 0.0, 255.0]
+    

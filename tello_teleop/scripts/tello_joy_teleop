@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+import std_msgs.msg
+import sensor_msgs.msg
+import geometry_msgs.msg
+
+
+class TelloJoystick(Node):
+    def __init__(self):
+        super().__init__("tello_joy_teleop")
+
+        # getting configuration from yaml file
+        self.get_params()
+        self.last_pressed = False
+        self.turbo = False
+        self.vel_flag = False
+
+        # ROS publishers
+        self.land_pub = self.create_publisher(std_msgs.msg.Empty, "land", 1)
+        self.takeoff_pub = self.create_publisher(std_msgs.msg.Empty, "takeoff", 1)
+        self.flip_pub = self.create_publisher(std_msgs.msg.String, "flip", 2)
+        self.emergency_pub = self.create_publisher(std_msgs.msg.Empty, "emergency", 1)
+        self.vel_pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 5)
+
+        # ROS subscribers
+        self.joy_sub = self.create_subscription(sensor_msgs.msg.Joy, "joy", self.joy_callback, 1)
+
+        self.get_logger().info("Starting joy teleoperation.")
+
+    def get_params(self):
+        # ROS parameters for button maping
+        self.declare_parameters(namespace='', parameters=[
+            ("main_deadman",   5),
+            ("scnd_deadman",   4),
+            ("land_button",    1),
+            ("takeoff_button", 0),
+            ("emergency_button", 3),
+            ("turbo_button", 11)
+        ])
+        
+        # ROS parameters for axis mapping
+        self.declare_parameters(namespace='', parameters=[
+            ("linear_x", 1),
+            ("linear_y", 0),
+            ("linear_z", 4),
+            ("angular_z", 3),
+            ("flip_ver", 6),
+            ("flip_hor", 7)
+        ])
+
+        # other ROS parameters
+        self.declare_parameters(namespace='', parameters=[
+            ("linear_offset", 0.2),
+            ("linear_scale", 0.1),
+            ("angular_offset", 0.1),
+            ("angular_scale", 1.15),
+            ("flip_keys", [0, 1, 2, 3, 4, 5, 6, 7]),
+            ("flip_vals", ['f', 'b', 'r', 'l', 'fl', 'fr', 'bl', 'br']),
+            ("flip_axis_hash", 4),
+            ("turbo_lin_scale", 1.0),
+            ("turbo_ang_scale", 1.0)
+        ])
+
+        # getting parameters
+        (self.main_deadman_button, self.secnd_deadman_button) = self.get_parameters(["main_deadman", "scnd_deadman"])
+        (self.land_button, self.takeoff_button, self.emergency_button) = self.get_parameters(["land_button", "takeoff_button", "emergency_button"])
+
+        (self.linear_x_axis, self.linear_y_axis, self.linear_z_axis) = self.get_parameters(["linear_x", "linear_y", "linear_z"])
+        (self.angular_z_axis, self.flip_ver_axis, self.flip_hor_axis) = self.get_parameters(["angular_z", "flip_ver", "flip_hor"])
+        
+        (self.linear_offset, self.linear_scale) = self.get_parameters(["linear_offset", "linear_scale"])
+        (self.angular_offset, self.angular_scale) = self.get_parameters(["angular_offset", "angular_scale"])
+
+        (flip_keys, flip_vals, self.flip_hash) = self.get_parameters(["flip_keys", "flip_vals", "flip_axis_hash"])
+        self.flip_dict = dict()
+
+        for k,v in list(zip(flip_keys.value, flip_vals.value)):
+            #self.get_logger().info("{}, {}".format(k,v))
+            self.flip_dict[k] = v
+
+        self.turbo_button_id = self.get_parameter("turbo_button")
+        (self.turbo_lin_scale, self.turbo_ang_scale) = self.get_parameters(["turbo_lin_scale", "turbo_ang_scale"])
+
+
+    def parse_joy(self, buttons, axes):
+        max_buttons_idx = len(buttons) - 1
+        max_axes_idx = len(axes) - 1
+
+        
+        # Parsing buttons
+        try:
+            self.main_deadman = buttons[self.main_deadman_button.value]
+        except Exception as e:
+            self.get_logger().error("Main deadman button out of bounds. Max idx: {}, given: {}.".format(max_buttons_idx, self.main_deadman_button.value))
+            return False
+
+        try:
+            self.scnd_deadman = buttons[self.secnd_deadman_button.value]
+        except Exception as e:
+            self.get_logger().error("Second deadman button out of bounds. Max idx: {}, given {}.".format(max_buttons_idx, self.secnd_deadman_button.value))
+            return False
+
+        try:
+            self.land = buttons[self.land_button.value]
+        except Exception as e:
+            self.get_logger().error("Land button out of bounds. Max idx: {}, given {}.".format(max_buttons_idx, self.land_button.value))            
+            return False
+            
+        try:
+            self.takeoff = buttons[self.takeoff_button.value]
+        except Exception as e:
+            self.get_logger().error("Takeoff button out of bounds. Max idx: {}, given: {}.".format(max_buttons_idx, self.takeoff_button.value))
+            return False
+
+        try:
+            self.emergency = buttons[self.emergency_button.value]
+        except Exception as e:
+            self.get_logger().error("Emergency button out of bounds. Max idx: {}, given: {}.".format(max_buttons_idx, self.emergency_button.value))
+            return False
+
+        try:
+            self.turbo_button = buttons[self.turbo_button_id.value]
+        except Exception as e:
+            self.get_logger().error("Turbo button out of bounds. Max idx: {}, given: {}.".format(max_buttons_idx, self.turbo_xy_button.value))
+            return False
+
+        # Parsing axes
+        try:
+            self.linear_x = axes[self.linear_x_axis.value]
+        except Exception as e:
+            self.get_logger().error("Linear x axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.linear_x_axis.value))
+            return False
+
+        try:
+            self.linear_y = axes[self.linear_y_axis.value]
+        except Exception as e:
+            self.get_logger().error("Linear y axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.linear_y_axis.value))
+            return False
+
+        try:
+            self.linear_z = axes[self.linear_z_axis.value]
+        except Exception as e:
+            self.get_logger().error("Linear z axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.linear_z_axis.value))
+            return False
+
+        try:
+            self.angular_z = axes[self.angular_z_axis.value]
+        except Exception as e:
+            self.get_logger().error("Angular z axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.angular_z_axis.value))
+            return False
+
+        try:
+            self.flip_ver = axes[self.flip_ver_axis.value]
+        except Exception as e:
+            self.get_logger().error("Vertical flip axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.flip_ver_axis.value))
+            return False
+
+        try:    
+            self.flip_hor = axes[self.flip_hor_axis.value]
+        except Exception as e:
+            self.get_logger().error("Horizontal flip axis out of bounds. Max idx: {}, given: {}.".format(max_axes_idx, self.flip_hor_axis.value))
+            return False
+        
+        return True
+
+    def joy_callback(self, data):
+        buttons = data.buttons
+        axes = data.axes
+
+        res = self.parse_joy(buttons, axes)
+
+        if not res:
+            return
+
+        if self.main_deadman and self.scnd_deadman:
+            msg = std_msgs.msg.Empty()
+            
+            if self.emergency:
+                self.get_logger().info("emergency")
+                self.emergency_pub.publish(msg)
+            
+            if self.takeoff:
+                self.get_logger().info("Takeoff")
+                self.takeoff_pub.publish(msg)
+
+            if self.land:
+                self.get_logger().info("Landing")
+                self.land_pub.publish(msg)
+
+        if self.turbo_button and not self.last_pressed:
+            self.turbo = not self.turbo
+            self.last_pressed = True
+        elif not self.turbo_button:
+            self.last_pressed = False
+
+
+        if self.main_deadman:
+            self.vel_flag = True
+            vel_msg = geometry_msgs.msg.Twist()
+
+            linear_scale = self.linear_scale.value * self.turbo_lin_scale.value if self.turbo else self.linear_scale.value
+            lin_z_scale = self.linear_scale.value * self.turbo_lin_scale.value if self.turbo else self.linear_scale.value
+            angular_scale = self.angular_scale.value * self.turbo_ang_scale.value if self.turbo else self.angular_scale.value
+
+            self.linear_x = 0.0 if abs(self.linear_x) < self.linear_offset.value else self.linear_x
+            self.linear_y = 0.0 if abs(self.linear_y) < self.linear_offset.value else self.linear_y
+            self.linear_z = 0.0 if abs(self.linear_z) < self.linear_offset.value else self.linear_z
+
+            vel_msg.linear.x = self.linear_x * linear_scale
+            vel_msg.linear.y = self.linear_y * linear_scale
+            vel_msg.linear.z = self.linear_z * lin_z_scale
+
+            self.angular_z = 0.0 if abs(self.angular_z) < self.angular_offset.value else self.angular_z
+
+            vel_msg.angular.z = self.angular_z * angular_scale
+
+            self.vel_pub.publish(vel_msg)
+        elif self.vel_flag:
+            self.vel_flag = False
+            vel_msg = geometry_msgs.msg.Twist()
+            self.vel_pub.publish(vel_msg)
+
+        if self.scnd_deadman and not self.main_deadman:
+            code = axes[self.flip_ver_axis.value] + self.flip_hash.value * axes[self.flip_hor_axis.value]
+            try:
+                if code != 0:
+                    msg = std_msgs.msg.String()
+                    msg.data = self.flip_dict[code]
+
+                    self.flip_pub.publish(msg)
+            except Exception as e:
+                self.get_logger().error("Bad flip hash, got: {}".format(code))
+
+        
+
+if __name__ == '__main__':
+    rclpy.init(args=None)
+    publisher = TelloJoystick()
+
+    try:
+        rclpy.spin(publisher)
+    except KeyboardInterrupt:
+        publisher.get_logger().info("Got Ctrl+C, shuting down.")
+        publisher.destroy_node()
+    finally:
+        rclpy.shutdown()
