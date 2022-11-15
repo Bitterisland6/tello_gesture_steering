@@ -2,8 +2,9 @@
    <arg name="use_model" default="true" description="Flag specifying whether or not use model for gesture recognition."/>
    <arg name="model_path" default="$(find-pkg-share gesture_steering)/models/10_class_better_data.tflite" description="Path to the neural network model used for gesture recognition."/>
    <arg name="config_file" default="$(find-pkg-share gesture_steering)/config/steering_params.yaml" description="Path to file with configuration parameters"/>
+   <arg name="severity" default="info" description="Severitty level of the gesture_steering node"/>
    
-    <node pkg="gesture_steering" exec="gesture_steering" output="screen" args="-m $(var use_model) -p $(var model_path)">
+    <node pkg="gesture_steering" exec="gesture_steering" output="screen" args="-m $(var use_model) -p $(var model_path) --ros-args --log-level $(var severity)">
         <param from="$(var config_file)"/>
     </node>
 </launch>
