@@ -2,7 +2,6 @@
 
 import sys
 import argparse
-from collections import deque
 
 import rclpy
 from rclpy.utilities import remove_ros_args
@@ -26,24 +25,12 @@ class GestureSteering(Node):
         super().__init__("static_gesture_steering")
         self.get_params()
 
-        # self.gesture_to_func = {
-        #     # 0: lambda: self.pub_velocity(0, 0, 0, 0),
-        #     0: self.pub_velocity,
-        #     1: self.pub_velocity,
-        #     2: self.pub_velocity,
-        #     3: self.pub_velocity,
-        #     4: self.flip,
-        #     5: self.flip,
-        #     6: self.flip,
-        #     7: self.flip,
-        #     8: self.land,
-        #     9: self.pub_velocity,
-        # }
-
         self.bridge = cv_bridge.CvBridge()
 
+        # initialization of interpretation method based on use_model argument
         self.use_model = use_model
         if use_model:
+            # using neural network model
             self.get_logger().info("Using model for gesture recognition.")
             try:
                 self.interpreting_func = self.model_interpretation
@@ -54,10 +41,12 @@ class GestureSteering(Node):
             except ValueError as e:
                 raise Exception(f"Couldnt load tflite model: {modelPath}")
         else:
+            # using math interpreter
             self.interpreting_func = self.math_interpretation
             self.interpreter = mgi.Interpreter()
             self.get_logger().info("Using math interpreter for gesture recognition.")
 
+        # flag for stopping the drone if the interpreted gesture doesn't move the drone
         self.vel_gesture = False
 
         # ros publishers
@@ -75,6 +64,8 @@ class GestureSteering(Node):
         self.get_logger().info("Starting static_gesture_steering node.")
 
     def get_params(self):
+        """Function loading ros parameters from yaml file"""
+
         self.declare_parameters(
             namespace="",
             parameters=[
@@ -92,13 +83,16 @@ class GestureSteering(Node):
             ],
         )
 
+        # velocities parameters
         self.linear_y_const = float(self.get_parameter("linear_y_const").value)
         self.linear_x_const = float(self.get_parameter("linear_x_const").value)
         self.linear_z_const = float(self.get_parameter("linear_z_const").value)
         self.angular_z_const = float(self.get_parameter("angular_z_const").value)
 
+        # confidence threshold for detection
         self.threshold = float(self.get_parameter("confidence_threshold").value)
 
+        # gestures instructions
         gestures = self.get_parameter("gestures").value
 
         if len(gestures) == 1:
@@ -116,6 +110,7 @@ class GestureSteering(Node):
             )
             self.declare_parameter("func_arguments." + gesture, param_type)
 
+        # mapping gesture to id and saving instructions for each gesture
         for id_, gesture in enumerate(gestures):
             self.steering_arguments[id_] = self.get_parameter(
                 "func_arguments." + gesture
@@ -123,6 +118,7 @@ class GestureSteering(Node):
             self.gesture_to_id[gesture] = id_
             self.id_to_gesture[id_] = gesture
 
+        # hand tracker parameters
         width = int(self.get_parameter("width").value)
         height = int(self.get_parameter("height").value)
         min_det_conf = float(self.get_parameter("min_detection_confidence").value)
@@ -138,11 +134,25 @@ class GestureSteering(Node):
         )
 
     def model_interpretation(self, normalized_landmarks):
+        """Function getting model interpretation of the gesture
+        from landmarks acquired from hand tracker.
+
+        Args:
+            normalized_landmarks: hand landmarks in raw format from hand tracker
+        Returns:
+            class_id: id of a detected gesture
+            val: model confidence of its decision
+        """
+        # parsing landmarks to operational format
         landmarks = parse_landmarks(normalized_landmarks)
+
+        # input landmarks to model
         self.interpreter.set_tensor(
             self.input_details[0]["index"], [landmarks.astype(np.float32)]
         )
+        # running inference
         self.interpreter.invoke()
+        # getting prediction
         prediction = self.interpreter.get_tensor(self.output_details[0]["index"])
         class_id = np.argmax(prediction[0])
         val = prediction[0][class_id]
@@ -150,6 +160,19 @@ class GestureSteering(Node):
         return class_id, val
 
     def math_interpretation(self, landmarks):
+        """Function gettin math interpretation of the gesture
+        from scaled landmarks (positions are in image coordinates,
+        not in the range of [0,1]) acquired from hand tracker.
+
+        Args:
+            landmarks: hand landmarks coordinates from hand tracker,
+            that are scaled to image size and in operational format (list of tuples)
+        Returns:
+            A tuple of gesture indentificator and confidence, where:
+                * identificator is either id (successful recognition)
+                  or "none" (failed to recognize gesture)
+                * confidence is either 1.0 or 0.0 (success or failure in recognition)
+        """
         status = self.interpreter.get_fingers_open(landmarks)
 
         if sum(status) == 2 and status[2] and status[4]:
@@ -190,14 +213,28 @@ class GestureSteering(Node):
         return "none", 0.0
 
     def get_steering(self, img):
+        """Function that runs hand detection on the image
+        and gesture interpretation using implemented methods.
+        Also gives instructions to the robot based on the interpretation.
+
+        Args:
+            img: opencv format image from robot camera
+        Returns:
+            gesture: id of the interpreted gesture
+            confidence: confidence of the interpretation
+        """
+
         landmarks = self.tracker.get_landmarks(img, normalized=self.use_model)
 
+        # checking if the hand got detected
         if not landmarks:
             self.pub_velocity()
             return 9, 0.0
 
+        # getting the interpretation
         gesture, confidence = self.interpreting_func(landmarks)
 
+        # checking if the confidence is high enough
         if confidence < self.threshold:
             self.get_logger().info("No gesture detected")
             self.pub_velocity()
@@ -207,17 +244,22 @@ class GestureSteering(Node):
             f"Interpreted gesture: {self.id_to_gesture[gesture]}, confidence: {round(confidence*100, 2)}%"
         )
 
+        # increasing number of "land" detection in a row - prevents random detections
         if self.id_to_gesture[gesture] == "land":
             self.land_count += 1
         else:
             self.land_count = 0
 
-        #self.gesture_to_func[gesture](*self.steering_arguments[gesture])
+        # self.gesture_to_func[gesture](*self.steering_arguments[gesture])
+        # operating the drone based on the interpretation
         self.command(self.steering_arguments[gesture])
 
         return gesture, confidence
 
     def img_callback(self, data: sensor_msgs.msg.Image):
+        """Function called each time a message on ros topic with camera data comes.
+        Puts information text on the image with detected gesture and confidence.
+        """
         cv_img = self.bridge.imgmsg_to_cv2(data, "passthrough")
 
         gesture, confidence = self.get_steering(cv_img)
@@ -230,20 +272,41 @@ class GestureSteering(Node):
         cv2.imshow("img", cv_img)
         cv2.waitKey(1)
 
-    def land(self, empty):
-        msg = std_msgs.msg.Empty()
-        self.land_pub.publish(msg)
-
     def command(self, args):
+        """Function invoking right method based on the arguments that it got.
+        Works as an universal function for commanding the robot.
+        Methods for specific actions are invoked if the arguments are in right format:
+            * one-element list, where the element is one of "l", "f", "r", "b" - flip function
+                The letters represent flip direction (left, front, right, back)
+            * list with 4 floats - pub_velocity function
+                The numbers represent values for speed in different axes for linear and angular speeds in such order:
+                (linear x, linear y, linear z, angular z)
+            * one-element list, where the element is of any type
+              and different from "l", "f", "r" and "b" - land function (if the gesture was detected couple times in a row)
+        Arg:
+            args: list of arguments that will be provided to function with specific instructions.
+        """
+        # checking if flip instruction
         if args[0] in ["l", "f", "r", "b"]:
             self.flip(*args)
+        # checking if movement instruction
         elif len(args) > 1:
             self.pub_velocity(*args)
+        # checking if land instruction
         elif self.land_count > 5:
             self.land_count = 0
             self.land(*args)
-    
+
     def pub_velocity(self, linear_x=0.0, linear_y=0.0, linear_z=0.0, angular_z=0.0):
+        """Function performing movement operation of the robot.
+        Publishes Twist message to "cmd_vel" topic.
+
+        Args:
+            linear_x: value of linear speed in x axis (gets multiplied by constant from parameter)
+            linear_y: value of linear speed in y axis (gets multiplied by constant from parameter)
+            linear_z: value of linear speed in z axis (gets multiplied by constant from parameter)
+            angular_z: value of angular speed in z axis (gets multiplied by constant from parameter)
+        """
         vel_msg = geometry_msgs.msg.Twist()
 
         vel_msg.angular.z = angular_z * self.angular_z_const
@@ -254,9 +317,24 @@ class GestureSteering(Node):
         self.cmd_vel_pub.publish(vel_msg)
 
     def flip(self, direction):
+        """Function performing flip operation of the robot.
+        Publishes String message to "flip" topic.
+
+        Args:
+            direction: a single letter ("f"/"b"/"l"/"r") representing flip direction (front, back, left, right)
+        """
         msg = std_msgs.msg.String()
         msg.data = direction
         self.flip_pub.publish(msg)
+
+    def land(self, empty):
+        """Function performig land operation of the robot.
+        Publishes empty message on the "land" topic (works like a trigger).
+        Args:
+            empty: just a placeholder needed for the code structure,
+            not used in the function as the "land" topic is of type std_msgs.Empty"""
+        msg = std_msgs.msg.Empty()
+        self.land_pub.publish(msg)
 
 
 def add_arguments(parser: argparse.ArgumentParser):
@@ -282,6 +360,16 @@ def add_arguments(parser: argparse.ArgumentParser):
 
 
 def parse_landmarks(landmarks):
+    """Function parsing landmarks to operational format.
+    Landmarks returned from hand tracker are a dictionary.
+    Returned value of this function is a numpy array,
+    with landmark coordinates (x, y, z).
+
+    Args:
+        landmarks: landmarks returned from hand tracker in original format
+    Returns:
+        ret: numpy array of shape (21,3) with landmarks coordinates"""
+
     ret = []
     for landmark in landmarks.landmark:
         ret.append([landmark.x, landmark.y, landmark.z])
@@ -292,7 +380,9 @@ def parse_landmarks(landmarks):
 if __name__ == "__main__":
     rclpy.init()
 
-    parser = argparse.ArgumentParser(description="Operate the drone using hand gestures.")
+    parser = argparse.ArgumentParser(
+        description="Operate the drone using hand gestures."
+    )
     add_arguments(parser)
 
     rosargv = remove_ros_args(sys.argv)[1:]
