@@ -46,9 +46,6 @@ class GestureSteering(Node):
             self.interpreter = mgi.Interpreter()
             self.get_logger().info("Using math interpreter for gesture recognition.")
 
-        # flag for stopping the drone if the interpreted gesture doesn't move the drone
-        self.vel_gesture = False
-
         # ros publishers
         self.land_pub = self.create_publisher(std_msgs.msg.Empty, "land", 10)
         self.cmd_vel_pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
@@ -173,44 +170,16 @@ class GestureSteering(Node):
                   or "none" (failed to recognize gesture)
                 * confidence is either 1.0 or 0.0 (success or failure in recognition)
         """
-        status = self.interpreter.get_fingers_open(landmarks)
+        gesture = self.interpreter.get_gesture(landmarks)
 
-        if sum(status) == 2 and status[2] and status[4]:
-            return self.gesture_to_id["land"], 1.0
-
-        if self.interpreter.gesture_up(landmarks):
-            self.vel_gesture = True
-            return self.gesture_to_id["up"], 1.0
-
-        elif self.interpreter.gesture_down(landmarks):
-            self.vel_gesture = True
-            return self.gesture_to_id["down"], 1.0
-
-        elif self.interpreter.gesture_left(landmarks):
-            self.vel_gesture = True
-            return self.gesture_to_id["left"], 1.0
-
-        elif self.interpreter.gesture_right(landmarks):
-            self.vel_gesture = True
-            return self.gesture_to_id["right"], 1.0
-
-        elif self.vel_gesture:
-            self.vel_gesture = False
+        # stopping the drone in place if the gesture is not a movement instruction
+        if gesture not in ("left", "right", "up", "down"):
             self.pub_velocity()
 
-        if self.interpreter.flip_front(landmarks):
-            return self.gesture_to_id["flip_front"], 1.0
-
-        elif self.interpreter.flip_back(landmarks):
-            return self.gesture_to_id["flip_back"], 1.0
-
-        elif self.interpreter.flip_left(landmarks):
-            return self.gesture_to_id["flip_right"], 1.0
-
-        elif self.interpreter.flip_right(landmarks):
-            return self.gesture_to_id["flip_left"], 1.0
-
-        return "none", 0.0
+        if gesture == "none":
+            return "none", 0.0
+        else:
+            return self.gesture_to_id[gesture], 1.0
 
     def get_steering(self, img):
         """Function that runs hand detection on the image
@@ -223,7 +192,6 @@ class GestureSteering(Node):
             gesture: id of the interpreted gesture
             confidence: confidence of the interpretation
         """
-
         landmarks = self.tracker.get_landmarks(img, normalized=self.use_model)
 
         # checking if the hand got detected
@@ -240,17 +208,12 @@ class GestureSteering(Node):
             self.pub_velocity()
             return 9, 0.0
 
-        self.get_logger().info(
-            f"Interpreted gesture: {self.id_to_gesture[gesture]}, confidence: {round(confidence*100, 2)}%"
-        )
-
         # increasing number of "land" detection in a row - prevents random detections
         if self.id_to_gesture[gesture] == "land":
             self.land_count += 1
         else:
             self.land_count = 0
 
-        # self.gesture_to_func[gesture](*self.steering_arguments[gesture])
         # operating the drone based on the interpretation
         self.command(self.steering_arguments[gesture])
 
@@ -263,26 +226,29 @@ class GestureSteering(Node):
         cv_img = self.bridge.imgmsg_to_cv2(data, "passthrough")
 
         gesture, confidence = self.get_steering(cv_img)
+        
+        #putting info on the image
         msg = f"Gesture: {self.id_to_gesture[gesture]}, confidence: {round(confidence*100, 2)}%"
         cv2.putText(cv_img, msg, (10, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
         cv2.putText(
             cv_img, msg, (10, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 255), 1
         )
+        self.get_logger().debug(msg)
 
         cv2.imshow("img", cv_img)
         cv2.waitKey(1)
 
     def command(self, args):
         """Function invoking right method based on the arguments that it got.
-        Works as an universal function for commanding the robot.
+        Works as an universal function for commanding the drone.
         Methods for specific actions are invoked if the arguments are in right format:
-            * one-element list, where the element is one of "l", "f", "r", "b" - flip function
+            * one-element list, where the element is one of "l", "f", "r", "b" - flip
                 The letters represent flip direction (left, front, right, back)
-            * list with 4 floats - pub_velocity function
+            * list with 4 floats - movement
                 The numbers represent values for speed in different axes for linear and angular speeds in such order:
                 (linear x, linear y, linear z, angular z)
             * one-element list, where the element is of any type
-              and different from "l", "f", "r" and "b" - land function (if the gesture was detected couple times in a row)
+              and different from "l", "f", "r" and "b" - landing (if the gesture was detected couple times in a row)
         Arg:
             args: list of arguments that will be provided to function with specific instructions.
         """
@@ -317,7 +283,7 @@ class GestureSteering(Node):
         self.cmd_vel_pub.publish(vel_msg)
 
     def flip(self, direction):
-        """Function performing flip operation of the robot.
+        """Function performing flip operation of the drone.
         Publishes String message to "flip" topic.
 
         Args:
@@ -328,7 +294,7 @@ class GestureSteering(Node):
         self.flip_pub.publish(msg)
 
     def land(self, empty):
-        """Function performig land operation of the robot.
+        """Function performing land operation of the drone.
         Publishes empty message on the "land" topic (works like a trigger).
         Args:
             empty: just a placeholder needed for the code structure,
