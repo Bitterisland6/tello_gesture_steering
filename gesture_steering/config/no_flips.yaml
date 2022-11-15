@@ -1,0 +1,30 @@
+static_gesture_steering:
+  ros__parameters:
+    # gesture names
+    gestures: ["down", "up", "left", "right", "front", "back", "rotate_left", "rotate_right", "land", "nothing"]
+    func_arguments:
+      down: [0, 0, -1, 0]
+      up: [0, 0, 1, 0]
+      left: [0, -1, 0, 0]
+      right: [0, 1, 0, 0]
+      front: [1, 0, 0, 0]
+      back: [-1, 0, 0, 0]
+      rotate_left: [0, 0, 0, -1]
+      rotate_right: [0, 0, 0, 1]
+      land: [1]
+      nothing: [0, 0, 0, 0]
+    # steering constants
+    linear_y_const: 0.3
+    linear_x_const: 0.3
+    linear_z_const: 0.5
+    angular_z_const: 0.5
+    
+    # model parameters
+    confidence_threshold: 0.95
+
+    # hand tracker parameters
+    width: 640  # 960
+    height: 480 # 720
+    min_detection_confidence: 0.5
+    min_tracking_confidence: 0.5
+    draw: True
