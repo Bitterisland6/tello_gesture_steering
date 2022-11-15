@@ -1,0 +1,7 @@
+<launch version="0.1.1">
+   <arg name="model_path" default="$(find-pkg-share gesture_steering)/models/movement_model.tflite" description="Path to the neural network model used for gesture recognition."/>
+   
+    <node pkg="gesture_steering" exec="movement_steering" output="screen" args="-p $(var model_path)">
+        <param from="$(find-pkg-share gesture_steering)/config/movement_params.yaml"/>
+    </node>
+</launch>

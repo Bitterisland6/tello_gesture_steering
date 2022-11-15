@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+
+import sys
+import argparse
+from collections import deque
+
+import rclpy
+from rclpy.utilities import remove_ros_args
+from rclpy.node import Node
+from rclpy.parameter import Parameter
+import sensor_msgs.msg
+import std_msgs.msg
+import geometry_msgs.msg
+import cv2
+import cv_bridge
+
+import tflite_runtime.interpreter as tflite
+import numpy as np
+
+import hand_tracking as ht
+
+
+class MovementSteering(Node):
+    def __init__(self, modelPath):
+        super().__init__("movement_steering")
+        self.get_params()
+
+        self.gesture_to_func = {
+            0: lambda: self.pub_velocity(0, 0, -1, 0),
+            1: lambda: self.pub_velocity(0, 0, 1, 0),
+            2: lambda: self.pub_velocity(0, -1, 0, 0),
+            3: lambda: self.pub_velocity(0, 1, 0, 0),
+            4: lambda: self.pub_velocity(1, 0, 0, 0),
+            5: lambda: self.pub_velocity(-1, 0, 0, 0),
+            6: lambda: self.pub_velocity(0, 0, 0, 0),
+        }
+
+        self.bridge = cv_bridge.CvBridge()
+
+        try:
+            self.interpreter = tflite.Interpreter(model_path=modelPath)
+            self.input_details = self.interpreter.get_input_details()
+            self.output_details = self.interpreter.get_output_details()
+            self.interpreter.allocate_tensors()
+        except ValueError as e:
+            raise Exception(f"Couldnt load tflite model: {modelPath}")
+
+        # ros publishers
+        self.cmd_vel_pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
+        self.land_pub = self.create_publisher(std_msgs.msg.Empty, "land", 10)
+
+        # ros subscribers
+        self.img_sub = self.create_subscription(
+            sensor_msgs.msg.Image, "drone_camera/image", self.img_callback, 1
+        )
+
+        self.buffer = deque()
+        self.detection_time = self.get_clock().now()
+        self.last_gesture = 6
+        self.last_conf = 0
+        self.land_count = 0
+        self.get_logger().info("Starting static_gesture_steering node.")
+
+    def get_params(self):
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("linear_y_const", 0.2),
+                ("linear_x_const", 0.2),
+                ("linear_z_const", 0.5),
+                ("angular_z_const", 1.0),
+                ("confidence_threshold", 0.95),
+                ("gestures", ["none"]),
+                ("width", 640),
+                ("height", 480),
+                ("min_detection_confidence", 0.5),
+                ("min_tracking_confidence", 0.5),
+                ("draw", False),
+            ],
+        )
+
+        self.linear_y_const = float(self.get_parameter("linear_y_const").value)
+        self.linear_x_const = float(self.get_parameter("linear_x_const").value)
+        self.linear_z_const = float(self.get_parameter("linear_z_const").value)
+        self.angular_z_const = float(self.get_parameter("angular_z_const").value)
+
+        self.threshold = float(self.get_parameter("confidence_threshold").value)
+
+        gestures = self.get_parameter("gestures").value
+
+        if len(gestures) == 1:
+            raise Exception("Couldn't load parameters.")
+
+        self.steering_arguments = dict()
+        self.gesture_to_id = dict()
+        self.id_to_gesture = dict()
+
+        # for gesture in gestures:
+        #     param_type = (
+        #         Parameter.Type.INTEGER_ARRAY
+        #         if "flip" not in gesture
+        #         else Parameter.Type.STRING_ARRAY
+        #     )
+        #     self.declare_parameter("func_arguments." + gesture, param_type)
+
+        for id_, gesture in enumerate(gestures):
+            # self.steering_arguments[id_] = self.get_parameter(
+            #     "func_arguments." + gesture
+            # ).value
+            self.gesture_to_id[gesture] = id_
+            self.id_to_gesture[id_] = gesture
+
+        width = int(self.get_parameter("width").value)
+        height = int(self.get_parameter("height").value)
+        min_det_conf = float(self.get_parameter("min_detection_confidence").value)
+        min_trac_conf = float(self.get_parameter("min_tracking_confidence").value)
+        draw = bool(self.get_parameter("draw").value)
+
+        self.tracker = ht.HandTracker(
+            width,
+            height,
+            draw=draw,
+            min_detection_confidence=min_det_conf,
+            min_tracking_confidence=min_trac_conf,
+        )
+
+    def pub_velocity(self, linear_x=0.0, linear_y=0.0, linear_z=0.0, angular_z=0.0):
+        vel_msg = geometry_msgs.msg.Twist()
+
+        vel_msg.angular.z = angular_z * self.angular_z_const
+        vel_msg.linear.x = linear_x * self.linear_x_const
+        vel_msg.linear.y = linear_y * self.linear_y_const
+        vel_msg.linear.z = linear_z * self.linear_z_const
+
+        self.cmd_vel_pub.publish(vel_msg)
+
+    def land(self):
+        msg = std_msgs.msg.Empty()
+        self.land_pub.publish(msg)
+
+    def model_interpretation(self, buffer):
+        self.interpreter.set_tensor(self.input_details[0]["index"], buffer)
+        self.interpreter.invoke()
+        prediction = self.interpreter.get_tensor(self.output_details[0]["index"])
+        class_id = np.argmax(prediction[0])
+        val = prediction[0][class_id]
+
+        return class_id, val
+
+    def get_steering(self, img):
+        landmarks = self.tracker.get_landmarks(img, normalized=True)
+
+        if not landmarks:
+            return 6, 0
+
+        self.buffer.append(parse_landmarks(landmarks))
+
+        if len(self.buffer) > 26:
+            self.buffer.popleft()
+
+        if len(self.buffer) < 26:
+            print("maaaało")
+            return 6, 0
+
+        np_array = np.array(list(self.buffer)).astype(np.float32)
+        offset = np.min(np_array[0], axis=0).tolist()
+
+        np_array += offset
+        gesture, confidence = self.model_interpretation([np_array])
+        if confidence < self.threshold:
+            self.get_logger().info("No gesture detected")
+            self.pub_velocity()
+
+            return 6, 0
+
+        # self.detection = True
+        self.detection_time = self.get_clock().now()
+        # self.buffer = deque()
+        self.get_logger().info(
+            f"Interpreted gesture: {self.id_to_gesture[gesture]}, confidence: {round(confidence*100, 2)}%"
+        )
+        return gesture, confidence
+
+    def img_callback(self, data: sensor_msgs.msg.Image):
+        cv_img = self.bridge.imgmsg_to_cv2(data, "passthrough")
+
+        # if (
+        #     self.detection_time + rclpy.duration.Duration(seconds=1.0)
+        #     < self.get_clock().now()
+        # ):
+        self.last_gesture, self.last_conf = self.get_steering(cv_img)
+
+        msg = (
+            f"Gesture: {self.id_to_gesture[self.last_gesture]}, confidence: {round(self.last_conf*100, 2)}%"
+        )
+        cv2.putText(cv_img, msg, (10, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
+        cv2.putText(
+            cv_img, msg, (10, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 255), 1
+        )
+
+        cv2.imshow("img", cv_img)
+        cv2.waitKey(1)
+
+        # if self.detection:
+        self.gesture_to_func[self.last_gesture]
+
+
+def add_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "-p",
+        "--path",
+        default="",
+        type=str,
+        nargs="?",
+        dest="model_path",
+        help="path to the neural network model",
+    )
+
+
+def parse_landmarks(landmarks):
+    ret = []
+    for landmark in landmarks.landmark:
+        ret.append([landmark.x, landmark.y, landmark.z])
+
+    return np.array(ret)
+
+
+if __name__ == "__main__":
+    rclpy.init()
+
+    parser = argparse.ArgumentParser(
+        description="Operate the drone using hand movements."
+    )
+    add_arguments(parser)
+
+    rosargv = remove_ros_args(sys.argv)[1:]
+    args = parser.parse_args(rosargv)
+
+    steering = MovementSteering(args.model_path)
+
+    try:
+        rclpy.spin(steering)
+    except KeyboardInterrupt as e:
+        steering.get_logger().info("Got Ctrl+C, shutting down.")
+        steering.land()
+        steering.destroy_node()
+    finally:
+        rclpy.shutdown()
