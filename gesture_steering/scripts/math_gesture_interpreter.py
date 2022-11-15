@@ -35,8 +35,42 @@ class Interpreter:
 
         return status
 
-    # separate function for each gesture
+    # function checking all gestures
+    def get_gesture(self, landmarks):
+        status = self.get_fingers_open(landmarks)
 
+        if sum(status) == 2 and status[2] and status[4]:
+            return "land"
+
+        if self.gesture_up(landmarks):
+            return "up"
+
+        elif self.gesture_down(landmarks):
+            return "down"
+
+        elif self.gesture_left(landmarks):
+            return "left"
+
+        elif self.gesture_right(landmarks):
+            return "right"
+
+        if self.flip_front(landmarks):
+            return "flip_front"
+
+        elif self.flip_back(landmarks):
+            return "flip_back"
+
+        elif self.flip_left(landmarks):
+            # right not left because of the perspective: my left is your right, when looking at each other
+            return "flip_right"
+
+        elif self.flip_right(landmarks):
+            # left not right because of the perspective: my left is your right, when looking at each other
+            return "flip_left"
+
+        return "none"
+
+    # separate function for each gesture
     def gesture_up(self, landmarks):
         # ring, pinky, index and middle fingers must be closed
         for pip, tip, mcp in self.finger_points:
@@ -184,17 +218,6 @@ class Interpreter:
             return False
 
         return True
-
-
-def get_binary_value(fingers):
-    power = 1
-    value = 0
-    for finger in fingers:
-        value += finger * power
-        power *= 2
-
-    return value
-
 
 if __name__ == "__main__":
     cap = cv2.VideoCapture(0)
