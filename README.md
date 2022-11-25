@@ -48,7 +48,7 @@ Follow the links to github repositories and clone them into your workspace.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Building from source
-*Most of the instructions here are the same steps from [ros_workspace] tutorial, but with instructions specified for this project, so if you are not a newbie with ros, you can skip those steps.*<br><br>
+*Most of the instructions here are the steps from [ros_workspace] tutorial, but with instructions specified for this project, so if you are not a newbie with ros, you can skip those steps.*<br><br>
 
 #### Installing dependecies
 Having all needed packages in `src` directory (including this one), you need to resolve dependencies. To do so, type in terminal:
