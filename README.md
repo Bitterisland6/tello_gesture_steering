@@ -106,10 +106,10 @@ ros2 launch gesture_steering gesture_steering.launch.xml
 ```
 Due to configurable interface, you can change actions performed by the drone on each gesture with the config files:
 - there are two parameters in yaml files inside the `config` directory:
-  - gestures: list of available gestures to detect
+  - gestures: list of available gestures to detect (names of the gestures)
   - func_arguments: a parameter with sub parameters where the sub parameter name corresponds to the string form `gestures` parameter, and it's value are the argument passed to the function performing actions. Based by the arguments, the actions is different:
     - *list of 4 integers `(-1/0/1)`*: a movement action specyfing movement axis (`linear_x`, `linear_y`, `linear_z`, `angular_z`) and movement direction (`-1`- backward, `1` - forward)
-    - *list of 1 intefer `(any number)`*: landing
+    - *list of 1 integer `(any number)`*: landing
     - *list of 1 character `(f/b/l/r)`*: flip instructions, the character specifies the direction of the flip (`front`, `back`, `left`, `right`)
   
   If you are lost with this description try to look on [no_flips.yaml](./gesture_steering/config/no_flips.yaml) or [steering_params.yaml](./gesture_steering/config/steering_params.yaml) files, and analyze them acording to these instructions. <br>
