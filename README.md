@@ -75,7 +75,7 @@ If everything went without any errors, you should be ready to launch the program
 ## Usage
 To run the program you need to be connected with the drone.<br>
 Each program needs to be run in separate terminal (remember that everyone of them needs to have your ros workspace sourced - `source /<path_to_workspace>/install/setup.bash` - replace `.bash` with your shell). <br><br>
-***If you want to integrate this project with your drone, check the ROS API chapter in [thesis.pdf](./thesis.pdf) .***
+***If you want to integrate this project with your drone, check the `ROS API (3.3)` chapter in [thesis.pdf](./thesis.pdf) .***
 
 ### tello_bringup
 Runs basic communication with the drone, and provides base topics and services, as well as video interface for the drone view.
@@ -100,11 +100,21 @@ ros2 launch tello_teleop joy_teleop.launch.xml
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### gesture_steering
-The main program, runs the gesture steering node
+The main program, runs the gesture steering node. 
 ```
 ros2 launch gesture_steering gesture_steering.launch.xml
 ```
-
+Due to configurable interface, you can change actions performed by the drone on each gesture with the config files:
+- there are two parameters in yaml files inside the `config` directory:
+  - gestures: list of available gestures to detect
+  - func_arguments: a parameter with sub parameters where the sub parameter name corresponds to the string form `gestures` parameter, and it's value are the argument passed to the function performing actions. Based by the arguments, the actions is different:
+    - *list of 4 integers `(-1/0/1)`*: a movement action specyfing movement axis (`linear_x`, `linear_y`, `linear_z`, `angular_z`) and movement direction (`-1`- backward, `1` - forward)
+    - *list of 1 intefer `(any number)`*: landing
+    - *list of 1 character `(f/b/l/r)`*: flip instructions, the character specifies the direction of the flip (`front`, `back`, `left`, `right`)
+  
+  If you are lost with this description try to look on [no_flips.yaml](./gesture_steering/config/no_flips.yaml) or [steering_params.yaml](./gesture_steering/config/steering_params.yaml) files, and analyze them acording to these instructions. <br>
+  To see the hand gestures that are recognized by the system check chapter `gestures (6.2)` in [thesis.pdf](./thesis.pdf). 
+  
 ***To each of those commands you can add `--show-args` flag, which will show available arguments with documentation***
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
