@@ -1,52 +1,88 @@
-# tello_gesture_steering
-Gesture steering project for DJI Ryze Tello drone using ROS2
+<a name="readme-top"></a>
 
-## Installation
-### Needed programs
+# tello_gesture_steering
+ROS2 project for operating DJI Ryze Tello drone using hand gestures
+
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#building-from-source">Building from source</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ol>
+</details>
+<br>
+
+## About the project
+This project was made as a dissertation for CS studies at the Univeristy of Wrocław. The project is easy to integrate with any drone that runs on ROS2. You can check full documentation of the project in the [thesis.pdf](./thesis.pdf) file. <br>
+The project allows users to move a flying drone using bare hands, without any controllers.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Getting Started
+### Prerequisites
 * **TensorFlow Lite** - needed to run the neural network model for gesture recognition. Installation commands:
   ```
   sudo apt install python3-pip
   pip3 install tflite-runtime
   ```
-* **ros galactic** - the base framework for running this project. Installation guide available on [ros_installation], but this command should work:
-  ```
-  sudo apt install ros-galactic-desktop
-  ```
-  You can change *galactic* with other ros2 distribution, but this version is recommended, as it is the version that the project was tested on.
+* **ros galactic** - the base framework for running this project. Installation guide available on [ros_installation] *(The project was built and tested on ros galactic; working on different ros2 distro not guaranteed)* <br>
+    - You will also need a ros workspace; if you don't have any, follow [ros_workspace] tutorial on creating one (clone this repo in step 3 of the tutorial).
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### ROS packages
-To install the following ros packages, you need to have a ROS workspace. To create one (if you don't have) follow creating [ros_workspace] tutorial. <br>
-***Every ros package should be downloaded / cloned into `src` directory of your workspace***
+The projects depends on two additional ROS2 packages:
 * **[tello_ros]** - a ros2 package integrating DJI Ryze Tello drone with ROS2 environment; needed for other programs to communicate with the robot.
 * **[ros2_shared]** - a ros2 package needed for compilation of ros nodes
 
 Follow the links to github repositories and clone them into your workspace.
-### Building the workspace
+***Every ros package should be downloaded / cloned into `src` directory of your workspace***
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Building from source
+*Most of the instructions here are the same steps from [ros_workspace] tutorial, but with instructions specified for this project, so if you are not a newbie with ros, you can skip those steps.*<br><br>
+
 #### Installing dependecies
-Having all needed programs installed, you need to clone this repository (into `src` directory of the ros workspace). Once every file is downloaded you need to download the dependencies specified in `package.xml` files. To do so type (beeing in your workspace directory):
+Having all needed packages in `src` directory (including this one), you need to resolve dependencies. To do so, type in terminal:
 ```
+rosdep init #(only if you are using rosdep for the first time ever)
 rosdep update
 rosdep install --from-paths src -iy
 ```
-***It's best to execute those commands beeing in the workspace directory, but you can also do this from anywhere providing path to the `src` directory of your workspace.***
-#### Building
+***You should swich `src` with the relative path to the `src` directory of your workspace.***
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+#### Building Workspace
 Having the dependencies installed, you can build your workspace, to do so type:
 ```
 colcon build --symlink-install
 ```
+*You need to have some ros workspace sourced to perform this command.*
+
 This command will create 3 directories, that you will need later for running the programs, so execute it inside your ros workspace directory.
 
 If everything went without any errors, you should be ready to launch the programs.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## Running the programs
-To run the program you obviously need a drone. Once it's on, you need to connect to its access point. When connected to the drone's network, you are ready to run the programs.<br>
-Each program needs to be run in separate terminal (remember that everyone of them needs to have your ros workspace sourced - `source /<path_to_workspace>/install/setup.bash` - replace `.bash` with your shell).
+## Usage
+To run the program you need to be connected with the drone.<br>
+Each program needs to be run in separate terminal (remember that everyone of them needs to have your ros workspace sourced - `source /<path_to_workspace>/install/setup.bash` - replace `.bash` with your shell). <br><br>
+***If you want to integrate this project with your drone, check the ROS API chapter in [thesis.pdf](./thesis.pdf) .***
 
 ### tello_bringup
 Runs basic communication with the drone, and provides base topics and services, as well as video interface for the drone view.
 ```
 ros2 launch tello_teleop base_setup.launch.xml
 ```
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### tello_teleop
 Operate the drone using a controller. Key mapping (for ps4 controller):
@@ -61,6 +97,7 @@ Operate the drone using a controller. Key mapping (for ps4 controller):
 ```
 ros2 launch tello_teleop joy_teleop.launch.xml
 ```
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### gesture_steering
 The main program, runs the gesture steering node
@@ -69,9 +106,11 @@ ros2 launch gesture_steering gesture_steering.launch.xml
 ```
 
 ***To each of those commands you can add `--show-args` flag, which will show available arguments with documentation***
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-
-
+## Contact
+Aleksander Szymański - bitterisland6@gmail.com
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 [ros_installation]: https://docs.ros.org/en/foxy/Installation.html
 [ros_workspace]: https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Creating-A-Workspace/Creating-A-Workspace.html
