@@ -120,7 +120,8 @@ Due to configurable interface, you can change actions performed by the drone on 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Demonstration
-[![Watch the video](https://img.youtube.com/vi/_Ze-3QzduGk/maxresdefault.jpg)](https://youtu.be/_Ze-3QzduGk)
+<!-- [![Watch the video](https://img.youtube.com/vi/_Ze-3QzduGk/maxresdefault.jpg)](https://youtu.be/_Ze-3QzduGk) -->
+<video src="https://youtu.be/_Ze-3QzduGk" width=180/>
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contact
