@@ -17,6 +17,7 @@ ROS2 project for operating DJI Ryze Tello drone using hand gestures
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
+    <li><a href="#demonstration">Demonstration</a></li>
     <li><a href="#contact">Contact</a></li>
   </ol>
 </details>
@@ -117,6 +118,9 @@ Due to configurable interface, you can change actions performed by the drone on 
   
 ***To each of those commands you can add `--show-args` flag, which will show available arguments with documentation***
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Demonstration
+[![Watch the video](https://img.youtube.com/vi/_Ze-3QzduGk/maxresdefault.jpg)](https://youtu.be/_Ze-3QzduGk)
 
 ## Contact
 Aleksander Szymański - bitterisland6@gmail.com
